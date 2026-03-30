@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
@@ -11,6 +11,14 @@ import { Card, CardContent } from "@/components/ui/card";
 type PaymentState = "loading" | "success" | "failed" | "pending";
 
 export default function PesaPalCallbackPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-secondary/50">Loading...</div>}>
+      <PesaPalCallbackContent />
+    </Suspense>
+  );
+}
+
+function PesaPalCallbackContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const [state, setState] = useState<PaymentState>("loading");
