@@ -1,0 +1,583 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/prisma-generated"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// User and Authentication
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String?
+  password      String
+  phone         String?
+  emailVerified DateTime?
+  image         String?
+  role          UserRole  @default(GUEST)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  accounts      Account[]
+  sessions      Session[]
+  bookings      Booking[]
+  invoices      Invoice[]
+  notifications Notification[]
+  preferences   GuestPreference?
+
+  @@map("users")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+enum UserRole {
+  ADMIN
+  STAFF
+  GUEST
+}
+
+// Tents
+model Tent {
+  id           String     @id @default(cuid())
+  name         String
+  slug         String     @unique
+  tagline      String?
+  description  String?    @db.Text
+  image        String?
+  price        Decimal    @db.Decimal(10, 2)
+  size         String?
+  bed          String?
+  guests       Int        @default(2)
+  rating       Float?     @default(0)
+  reviews      Int        @default(0)
+  amenities    String[] // Array of amenities
+  featured     Boolean    @default(false)
+  displayOrder Int        @default(0) // For homepage ordering
+  status       TentStatus @default(AVAILABLE)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  // Relations
+  bookings Booking[]
+  images   TentImage[]
+
+  @@map("tents")
+}
+
+enum TentStatus {
+  AVAILABLE
+  OCCUPIED
+  MAINTENANCE
+  UNAVAILABLE
+}
+
+model TentImage {
+  id        String   @id @default(cuid())
+  tentId    String
+  url       String
+  alt       String?
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+
+  tent Tent @relation(fields: [tentId], references: [id], onDelete: Cascade)
+
+  @@map("tent_images")
+}
+
+// Bookings
+model Booking {
+  id              String               @id @default(cuid())
+  userId          String
+  tentId          String
+  checkIn         DateTime
+  checkOut        DateTime
+  guests          Int                  @default(2)
+  adults          Int
+  children        Int                  @default(0)
+  totalAmount     Decimal              @db.Decimal(10, 2)
+  status          BookingStatus        @default(PENDING)
+  paymentStatus   BookingPaymentStatus @default(PENDING)
+  specialRequests String?              @db.Text
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  // Relations
+  user      User           @relation(fields: [userId], references: [id])
+  tent      Tent           @relation(fields: [tentId], references: [id])
+  invoice   Invoice?
+  addOns    BookingAddOn[]
+  guestInfo GuestInfo?
+
+  @@map("bookings")
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  CHECKED_IN
+  CHECKED_OUT
+  CANCELLED
+}
+
+enum BookingPaymentStatus {
+  PENDING
+  PARTIAL
+  PAID
+  REFUNDED
+  FAILED
+}
+
+model BookingAddOn {
+  id          String   @id @default(cuid())
+  bookingId   String
+  name        String
+  description String?
+  price       Decimal  @db.Decimal(10, 2)
+  quantity    Int      @default(1)
+  createdAt   DateTime @default(now())
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@map("booking_addons")
+}
+
+// Guest Information
+model GuestInfo {
+  id                  String   @id @default(cuid())
+  bookingId           String   @unique
+  firstName           String
+  lastName            String
+  email               String
+  phone               String?
+  nationality         String?
+  passportNumber      String?
+  age                 Int?
+  travelPurpose       String?  // Honeymoon, Family, Adventure, Photography, Business, etc.
+  dietaryRequirements String?  @db.Text
+  medicalInfo         String?  @db.Text
+  emergencyContact    String?  @db.Text
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@map("guest_info")
+}
+
+model GuestPreference {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  preferences Json? // Store preferences as JSON
+  notes       String?  @db.Text
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("guest_preferences")
+}
+
+// Invoices
+model Invoice {
+  id            String        @id @default(cuid())
+  bookingId     String        @unique
+  userId        String
+  invoiceNumber String        @unique
+  amount        Decimal       @db.Decimal(10, 2)
+  tax           Decimal       @default(0) @db.Decimal(10, 2)
+  total         Decimal       @db.Decimal(10, 2)
+  status        InvoiceStatus @default(PENDING)
+  dueDate       DateTime
+  paidDate      DateTime?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  // Relations
+  booking  Booking   @relation(fields: [bookingId], references: [id])
+  user     User      @relation(fields: [userId], references: [id])
+  payments Payment[]
+
+  @@map("invoices")
+}
+
+enum InvoiceStatus {
+  PENDING
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+model Payment {
+  id            String                   @id @default(cuid())
+  invoiceId     String
+  amount        Decimal                  @db.Decimal(10, 2)
+  method        PaymentMethod
+  transactionId String?                  @unique
+  status        TransactionPaymentStatus @default(PENDING)
+  processedAt   DateTime?
+  createdAt     DateTime                 @default(now())
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@map("payments")
+}
+
+enum PaymentMethod {
+  CREDIT_CARD
+  DEBIT_CARD
+  BANK_TRANSFER
+  MOBILE_MONEY
+  CASH
+}
+
+enum TransactionPaymentStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+// Blog
+model BlogPost {
+  id           String         @id @default(cuid())
+  slug         String         @unique
+  title        String
+  excerpt      String?        @db.Text
+  content      String         @db.Text
+  image        String?
+  category     String
+  date         DateTime       @default(now())
+  readTime     String?
+  featured     Boolean        @default(false)
+  status       BlogPostStatus @default(DRAFT)
+  authorName   String
+  authorRole   String?
+  authorAvatar String?
+  tags         String[]
+  views        Int            @default(0)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  publishedAt  DateTime?
+
+  @@map("blog_posts")
+}
+
+enum BlogPostStatus {
+  DRAFT
+  PUBLISHED
+  SCHEDULED
+  ARCHIVED
+}
+
+// Experiences
+model Experience {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  description String?  @db.Text
+  image       String?
+  price       Decimal  @db.Decimal(10, 2)
+  duration    String? // e.g., "3 hours"
+  capacity    Int?
+  available   Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  bookings ExperienceBooking[]
+
+  @@map("experiences")
+}
+
+model ExperienceBooking {
+  id           String        @id @default(cuid())
+  experienceId String
+  bookingId    String? // Optional link to tent booking
+  guestName    String
+  guestEmail   String
+  date         DateTime
+  participants Int           @default(1)
+  totalAmount  Decimal       @db.Decimal(10, 2)
+  status       BookingStatus @default(PENDING)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  experience Experience @relation(fields: [experienceId], references: [id])
+
+  @@map("experience_bookings")
+}
+
+// Inventory
+model InventoryItem {
+  id          String   @id @default(cuid())
+  name        String
+  category    String
+  description String?  @db.Text
+  quantity    Int      @default(0)
+  minStock    Int      @default(0)
+  unit        String? // e.g., "pieces", "liters"
+  cost        Decimal? @db.Decimal(10, 2)
+  supplier    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("inventory_items")
+}
+
+// Wildlife Sightings
+model WildlifeSighting {
+  id          String   @id @default(cuid())
+  species     String
+  location    String?
+  description String?  @db.Text
+  image       String?
+  date        DateTime @default(now())
+  guideName   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("wildlife_sightings")
+}
+
+// Transfers
+model Transfer {
+  id        String         @id @default(cuid())
+  type      TransferType
+  from      String
+  to        String
+  date      DateTime
+  time      String?
+  vehicle   String?
+  driver    String?
+  guests    String? // Guest names
+  status    TransferStatus @default(SCHEDULED)
+  notes     String?        @db.Text
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  @@map("transfers")
+}
+
+enum TransferType {
+  AIRPORT_PICKUP
+  AIRPORT_DROPOFF
+  GAME_DRIVE
+  EXCURSION
+  OTHER
+}
+
+enum TransferStatus {
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+// Notifications
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String?
+  type      NotificationType
+  title     String
+  message   String           @db.Text
+  read      Boolean          @default(false)
+  link      String?
+  createdAt DateTime         @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
+
+enum NotificationType {
+  BOOKING
+  PAYMENT
+  SYSTEM
+  REMINDER
+  ALERT
+}
+
+// Settings
+model Setting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String   @db.Text
+  category  String?
+  updatedAt DateTime @updatedAt
+
+  @@map("settings")
+}
+
+// Email Templates
+model EmailTemplate {
+  id        String   @id @default(cuid())
+  name      String
+  subject   String
+  html      String   @db.Text
+  variables String[]
+  category  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("email_templates")
+}
+
+// Email Campaigns
+model EmailCampaign {
+  id              String              @id @default(cuid())
+  name            String
+  subject         String
+  html            String              @db.Text
+  recipientType   String // ALL_GUESTS, BOOKED_GUESTS, SPECIFIC_USERS
+  recipientFilter Json? // Filter criteria
+  status          EmailCampaignStatus @default(DRAFT)
+  scheduledAt     DateTime?
+  sentAt          DateTime?
+  totalRecipients Int                 @default(0)
+  sentCount       Int                 @default(0)
+  openedCount     Int                 @default(0)
+  clickedCount    Int                 @default(0)
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  logs EmailLog[]
+
+  @@map("email_campaigns")
+}
+
+enum EmailCampaignStatus {
+  DRAFT
+  SCHEDULED
+  SENDING
+  SENT
+  CANCELLED
+}
+
+// Email Logs
+model EmailLog {
+  id         String      @id @default(cuid())
+  to         String
+  subject    String
+  templateId String?
+  campaignId String?
+  status     EmailStatus
+  openedAt   DateTime?
+  clickedAt  DateTime?
+  error      String?     @db.Text
+  createdAt  DateTime    @default(now())
+
+  campaign EmailCampaign? @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@index([to])
+  @@index([templateId])
+  @@index([campaignId])
+  @@index([status])
+  @@map("email_logs")
+}
+
+enum EmailStatus {
+  PENDING
+  SENT
+  DELIVERED
+  OPENED
+  CLICKED
+  BOUNCED
+  FAILED
+}
+
+// Channel Management
+model Channel {
+  id         String   @id @default(cuid())
+  name       String
+  type       String   // BOOKING_COM, AIRBNB, EXPEDIA, CUSTOM
+  apiKey     String?
+  apiSecret  String?
+  webhookUrl String?
+  syncEnabled Boolean @default(false)
+  settings   Json?
+  lastSyncAt DateTime?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@map("channels")
+}
+
+// Season Pricing
+model Season {
+  id          String   @id @default(cuid())
+  name        String
+  description String?  @db.Text
+  startDate   DateTime
+  endDate     DateTime
+  type        SeasonType
+  multiplier  Decimal  @db.Decimal(5, 2) // e.g., 1.50 for 50% increase
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("seasons")
+}
+
+enum SeasonType {
+  HIGH
+  MID
+  LOW
+  PREMIUM
+}
+
+// Special Date Pricing (holidays, events)
+model SpecialDate {
+  id          String   @id @default(cuid())
+  name        String
+  startDate   DateTime
+  endDate     DateTime
+  multiplier  Decimal  @db.Decimal(5, 2)
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("special_dates")
+}
