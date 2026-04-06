@@ -3,9 +3,6 @@ import type { Metadata } from 'next'
 import { Playfair_Display, Lato } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import { Providers } from '@/components/providers'
-import { ServiceWorkerRegister } from '@/components/service-worker-register'
-import { OfflineDetector } from '@/components/offline-detector'
-import { PWAInstaller } from '@/components/pwa-installer'
 import './globals.css'
 
 const _playfair = Playfair_Display({ subsets: ["latin"], variable: '--font-serif' });
@@ -59,9 +56,6 @@ export default function RootLayout({
         <Providers>
           {children}
         </Providers>
-        <ServiceWorkerRegister />
-        <OfflineDetector />
-        <PWAInstaller />
         <Analytics />
       </body>
     </html>
